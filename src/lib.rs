@@ -98,6 +98,10 @@ impl<T> ListContainer<T> {
         new_index
     }
 
+    // Excise a node from a list.
+    // The Index goes into the free list for
+    // later recycling, making it a logic error
+    // to use the value of `at` for further operations.
     pub fn remove(&mut self, at: Index) {
         let prev = self.prev(at);
         let next = self.next(at);
