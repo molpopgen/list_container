@@ -37,6 +37,20 @@ fn add_1000(bench: &mut Bencher) {
     });
 }
 
+fn add_1000_in_two_lists(bench: &mut Bencher) {
+    bench.iter(|| {
+        let mut list = ListContainer::<i32>::default();
+        let head = list.add_list(0);
+        let head2 = list.add_list(0);
+        let mut cursor = head;
+        let mut cursor2 = head2;
+        for i in 1..500 {
+            cursor = list.insert_after(cursor, i);
+            cursor2 = list.insert_after(cursor2, i);
+        }
+    });
+}
+
 fn add_1000_linked_list(bench: &mut Bencher) {
     bench.iter(|| {
         let mut list: LinkedList<u32> = LinkedList::new();
@@ -60,6 +74,7 @@ benchmark_group!(
     add_100,
     add_100_linked_list,
     add_1000,
+    add_1000_in_two_lists,
     add_1000_linked_list,
     vec_1000_no_capacity,
 );
