@@ -15,7 +15,6 @@ pub struct Cursor {
 
 #[derive(Default)]
 pub struct ListContainer<T> {
-    //head: Vec<Index>,
     cursor: Vec<Cursor>,
     data: Vec<T>,
     free_list: Vec<usize>,
@@ -38,50 +37,88 @@ impl<T> ListContainer<T> {
         }
     }
 
+    fn setup_insertion(&mut self, at: Index, datum: T) -> (Index, Index) {
+        let new_index = self.new_index(datum);
+        let index_at = self.cursor[at.0].current;
+        (new_index, index_at)
+    }
+
+    fn finalize_insertion(
+        &mut self,
+        next: Index,
+        next_value: Option<Index>,
+        prev: Index,
+        prev_value: Option<Index>,
+    ) {
+        self.set_next(next, next_value);
+        self.set_prev(prev, prev_value);
+    }
+
+    fn set_next(&mut self, at: Index, value: Option<Index>) {
+        self.cursor[at.0].next = value
+    }
+
+    fn set_prev(&mut self, at: Index, value: Option<Index>) {
+        self.cursor[at.0].prev = value
+    }
+
     pub fn add_list(&mut self, datum: T) -> Index {
         self.new_index(datum)
     }
 
+    pub fn next(&self, at: Index) -> Option<Index> {
+        self.cursor[at.0].next
+    }
+
+    pub fn prev(&self, at: Index) -> Option<Index> {
+        self.cursor[at.0].prev
+    }
+
     pub fn insert_after(&mut self, at: Index, datum: T) -> Index {
-        let new_index = self.new_index(datum);
-        let mut internal_cursor = self.cursor[at.0];
-        if let Some(next) = internal_cursor.next {
-            internal_cursor.next = Some(new_index);
-            let new_cursor = &mut self.cursor[new_index.0];
-            new_cursor.prev = Some(internal_cursor.current);
-            new_cursor.next = Some(next);
-            self.cursor[next.0].prev = Some(new_index);
-        } else {
-            internal_cursor.next = Some(new_index);
-            let new_cursor = &mut self.cursor[new_index.0];
-            new_cursor.prev = Some(internal_cursor.current);
+        let (new_index, index_at) = self.setup_insertion(at, datum);
+        if let Some(next) = self.next(at) {
+            self.set_next(new_index, Some(next));
+            self.set_prev(next, Some(new_index));
         }
-        self.cursor[internal_cursor.current.0] = internal_cursor;
+        self.finalize_insertion(index_at, Some(new_index), new_index, Some(index_at));
         new_index
     }
 
     pub fn insert_before(&mut self, at: Index, datum: T) -> Index {
-        let new_index = self.new_index(datum);
-        let mut internal_cursor = self.cursor[at.0];
-        if let Some(prev) = internal_cursor.prev {
-            internal_cursor.prev = Some(new_index);
-            let new_cursor = &mut self.cursor[new_index.0];
-            new_cursor.next = Some(internal_cursor.current);
-            new_cursor.prev = Some(prev);
-            self.cursor[prev.0].next = Some(new_index);
-        } else {
-            internal_cursor.prev = Some(new_index);
-            let new_cursor = &mut self.cursor[new_index.0];
-            new_cursor.next = Some(internal_cursor.current);
+        let (new_index, index_at) = self.setup_insertion(at, datum);
+        if let Some(prev) = self.prev(at) {
+            self.set_prev(new_index, Some(prev));
+            self.set_next(prev, Some(new_index));
         }
-        self.cursor[internal_cursor.current.0] = internal_cursor;
-        //self.cursor[internal_cursor.current.0] = new_index;
+        self.finalize_insertion(new_index, Some(index_at), index_at, Some(new_index));
         new_index
+    }
+
+    pub fn remove(&mut self, at: Index) {
+        let prev = self.prev(at);
+        let next = self.next(at);
+
+        if let Some(p) = prev {
+            self.set_next(p, next);
+        }
+        if let Some(n) = next {
+            self.set_prev(n, prev);
+        }
+        self.set_prev(at, None);
+        self.set_next(at, None);
+        self.free_list.push(at.0);
     }
 
     pub fn iterate_forward(&self, from: Index) -> impl Iterator<Item = &T> + '_ {
         IterateForward {
             next: Some(from),
+            lists: self,
+        }
+    }
+
+    pub fn iterate_backward(&self, from: Index) -> impl Iterator<Item = &T> + '_ {
+        IterateBackward {
+            prev: Some(from),
             lists: self,
         }
     }
@@ -98,6 +135,24 @@ impl<'lists, T> Iterator for IterateForward<'lists, T> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = self.next {
             self.next = self.lists.cursor[index.0].next;
+            Some(&self.lists.data[index.0])
+        } else {
+            None
+        }
+    }
+}
+
+struct IterateBackward<'lists, T> {
+    prev: Option<Index>,
+    lists: &'lists ListContainer<T>,
+}
+
+impl<'lists, T> Iterator for IterateBackward<'lists, T> {
+    type Item = &'lists T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(index) = self.prev {
+            self.prev = self.lists.cursor[index.0].prev;
             Some(&self.lists.data[index.0])
         } else {
             None
@@ -139,6 +194,49 @@ fn test_insert_after() {
     assert_eq!(
         forward,
         [0, 1, 7, 2],
+        "{:?}, {:?} {:?}, {:?}",
+        list.cursor,
+        head,
+        next0,
+        next1
+    );
+
+    list.remove(head);
+    let forward = list.iterate_forward(head).cloned().collect::<Vec<_>>();
+    assert_eq!(
+        forward,
+        [0],
+        "{:?}, {:?} {:?}, {:?}",
+        list.cursor,
+        head,
+        next0,
+        next1
+    );
+    let forward = list.iterate_forward(next0).cloned().collect::<Vec<_>>();
+    assert_eq!(
+        forward,
+        [1, 7, 2],
+        "{:?}, {:?} {:?}, {:?}",
+        list.cursor,
+        head,
+        next0,
+        next1
+    );
+    let forward = list.iterate_backward(next0).cloned().collect::<Vec<_>>();
+    assert_eq!(
+        forward,
+        [1],
+        "{:?}, {:?} {:?}, {:?}",
+        list.cursor,
+        head,
+        next0,
+        next1
+    );
+    let _ = list.insert_after(next0, 4);
+    let forward = list.iterate_forward(next0).cloned().collect::<Vec<_>>();
+    assert_eq!(
+        forward,
+        [1, 4, 7, 2],
         "{:?}, {:?} {:?}, {:?}",
         list.cursor,
         head,
