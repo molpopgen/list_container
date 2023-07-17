@@ -21,6 +21,14 @@ pub struct ListContainer<T> {
 }
 
 impl<T> ListContainer<T> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self{
+            cursor: Vec::with_capacity(capacity),
+            data: Vec::with_capacity(capacity),
+            free_list: vec![]
+        }
+    }
+
     pub fn new_index(&mut self, datum: T) -> Index {
         if let Some(index) = self.free_list.pop() {
             let _ = std::mem::replace(&mut self.data[index], datum);
