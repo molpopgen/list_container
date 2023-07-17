@@ -2,12 +2,8 @@
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Index(usize);
 
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
-pub struct Head(usize);
-
 #[derive(Clone, Copy, Debug)]
-pub struct Cursor {
+struct Cursor {
     current: Index,
     prev: Option<Index>,
     next: Option<Index>,
@@ -22,10 +18,10 @@ pub struct ListContainer<T> {
 
 impl<T> ListContainer<T> {
     pub fn with_capacity(capacity: usize) -> Self {
-        Self{
+        Self {
             cursor: Vec::with_capacity(capacity),
             data: Vec::with_capacity(capacity),
-            free_list: vec![]
+            free_list: vec![],
         }
     }
 
