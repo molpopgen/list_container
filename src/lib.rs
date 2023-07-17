@@ -22,16 +22,10 @@ pub struct ListContainer<T> {
 }
 
 impl<T> ListContainer<T> {
-    pub fn new_cursor(&mut self, datum: T) -> Cursor {
+    pub fn new_index(&mut self, datum: T) -> Index {
         if let Some(index) = self.free_list.pop() {
             let _ = std::mem::replace(&mut self.data[index], datum);
-            let cursor = Cursor {
-                current: Index(index),
-                prev: None,
-                next: None,
-            };
-            self.cursor[index] = cursor;
-            cursor
+            Index(index)
         } else {
             self.data.push(datum);
             let cursor = Cursor {
@@ -40,54 +34,54 @@ impl<T> ListContainer<T> {
                 next: None,
             };
             self.cursor.push(cursor);
-            cursor
+            Index(self.data.len() - 1)
         }
     }
 
-    pub fn add_list(&mut self, datum: T) -> Cursor {
-        self.new_cursor(datum)
+    pub fn add_list(&mut self, datum: T) -> Index {
+        self.new_index(datum)
     }
 
-    pub fn insert_after(&mut self, cursor: &mut Cursor, datum: T) -> Cursor {
-        let mut new_cursor = self.new_cursor(datum);
-        let mut internal_cursor = self.cursor[cursor.current.0];
+    pub fn insert_after(&mut self, at: Index, datum: T) -> Index {
+        let new_index = self.new_index(datum);
+        let mut internal_cursor = self.cursor[at.0];
         if let Some(next) = internal_cursor.next {
-            internal_cursor.next = Some(new_cursor.current);
+            internal_cursor.next = Some(new_index);
+            let new_cursor = &mut self.cursor[new_index.0];
             new_cursor.prev = Some(internal_cursor.current);
             new_cursor.next = Some(next);
-            self.cursor[next.0].prev = Some(new_cursor.current);
+            self.cursor[next.0].prev = Some(new_index);
         } else {
-            internal_cursor.next = Some(new_cursor.current);
+            internal_cursor.next = Some(new_index);
+            let new_cursor = &mut self.cursor[new_index.0];
             new_cursor.prev = Some(internal_cursor.current);
         }
-        *cursor = internal_cursor;
-        self.cursor[cursor.current.0] = internal_cursor;
-        self.cursor[new_cursor.current.0] = new_cursor;
-        new_cursor
+        self.cursor[internal_cursor.current.0] = internal_cursor;
+        new_index
     }
 
-    pub fn insert_before(&mut self, cursor: &mut Cursor, datum: T) -> Cursor
-    {
-        let mut new_cursor = self.new_cursor(datum);
-        let mut internal_cursor = self.cursor[cursor.current.0];
+    pub fn insert_before(&mut self, at: Index, datum: T) -> Index {
+        let new_index = self.new_index(datum);
+        let mut internal_cursor = self.cursor[at.0];
         if let Some(prev) = internal_cursor.prev {
-            internal_cursor.prev = Some(new_cursor.current);
+            internal_cursor.prev = Some(new_index);
+            let new_cursor = &mut self.cursor[new_index.0];
             new_cursor.next = Some(internal_cursor.current);
             new_cursor.prev = Some(prev);
-            self.cursor[prev.0].next = Some(new_cursor.current);
+            self.cursor[prev.0].next = Some(new_index);
         } else {
-            internal_cursor.prev = Some(new_cursor.current);
+            internal_cursor.prev = Some(new_index);
+            let new_cursor = &mut self.cursor[new_index.0];
             new_cursor.next = Some(internal_cursor.current);
         }
-        *cursor = internal_cursor;
-        self.cursor[cursor.current.0] = internal_cursor;
-        self.cursor[new_cursor.current.0] = new_cursor;
-        new_cursor
+        self.cursor[internal_cursor.current.0] = internal_cursor;
+        //self.cursor[internal_cursor.current.0] = new_index;
+        new_index
     }
 
-    pub fn iterate_forward(&self, from: Cursor) -> impl Iterator<Item = &T> + '_ {
+    pub fn iterate_forward(&self, from: Index) -> impl Iterator<Item = &T> + '_ {
         IterateForward {
-            next: Some(from.current),
+            next: Some(from),
             lists: self,
         }
     }
@@ -114,13 +108,13 @@ impl<'lists, T> Iterator for IterateForward<'lists, T> {
 #[test]
 fn test_insert_after() {
     let mut list = ListContainer::<i32>::default();
-    let mut head = list.add_list(0);
-    let mut next0 = list.insert_after(&mut head, 1);
-    let mut next1 = list.insert_after(&mut next0, 2);
+    let head = list.add_list(0);
+    let next0 = list.insert_after(head, 1);
+    let next1 = list.insert_after(next0, 2);
 
-    assert_eq!(list.data[head.current.0], 0);
-    assert_eq!(list.data[next0.current.0], 1);
-    assert_eq!(list.data[next1.current.0], 2);
+    assert_eq!(list.data[head.0], 0);
+    assert_eq!(list.data[next0.0], 1);
+    assert_eq!(list.data[next1.0], 2);
 
     for i in &list.cursor {
         println!("before {i:?}");
@@ -137,7 +131,7 @@ fn test_insert_after() {
         next1
     );
 
-    let _ = list.insert_before(&mut next1, 7);
+    let _ = list.insert_before(next1, 7);
     for i in &list.cursor {
         println!("after {i:?}");
     }
