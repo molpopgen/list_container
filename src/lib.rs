@@ -2,10 +2,31 @@
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Index(usize);
 
+impl Index {
+    #[inline(always)]
+    fn sentinel() -> Self {
+        Self(usize::MAX)
+    }
+
+    #[inline(always)]
+    fn is_sentinel(&self) -> bool {
+        self.0 == usize::MAX
+    }
+
+    #[inline(always)]
+    fn into_option(self) -> Option<Self> {
+        if self.is_sentinel() {
+            None
+        } else {
+            Some(self)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Cursor {
-    prev: Option<Index>,
-    next: Option<Index>,
+    prev: Index,
+    next: Index,
 }
 
 #[derive(Default)]
@@ -31,8 +52,8 @@ impl<T> ListContainer<T> {
         } else {
             self.data.push(datum);
             let cursor = Cursor {
-                prev: None,
-                next: None,
+                prev: Index::sentinel(),
+                next: Index::sentinel(),
             };
             self.cursor.push(cursor);
             Index(self.data.len() - 1)
@@ -47,19 +68,19 @@ impl<T> ListContainer<T> {
     fn finalize_insertion(
         &mut self,
         next: Index,
-        next_value: Option<Index>,
+        next_value: Index,
         prev: Index,
-        prev_value: Option<Index>,
+        prev_value: Index,
     ) {
         self.set_next(next, next_value);
         self.set_prev(prev, prev_value);
     }
 
-    fn set_next(&mut self, at: Index, value: Option<Index>) {
+    fn set_next(&mut self, at: Index, value: Index) {
         self.cursor[at.0].next = value
     }
 
-    fn set_prev(&mut self, at: Index, value: Option<Index>) {
+    fn set_prev(&mut self, at: Index, value: Index) {
         self.cursor[at.0].prev = value
     }
 
@@ -68,30 +89,38 @@ impl<T> ListContainer<T> {
     }
 
     pub fn next(&self, at: Index) -> Option<Index> {
+        self.next_raw(at).into_option()
+    }
+
+    fn next_raw(&self, at: Index) -> Index {
         self.cursor[at.0].next
     }
 
     pub fn prev(&self, at: Index) -> Option<Index> {
+        self.prev_raw(at).into_option()
+    }
+
+    pub fn prev_raw(&self, at: Index) -> Index {
         self.cursor[at.0].prev
     }
 
     pub fn insert_after(&mut self, at: Index, datum: T) -> Index {
         let (new_index, index_at) = self.setup_insertion(at, datum);
         if let Some(next) = self.next(at) {
-            self.set_next(new_index, Some(next));
-            self.set_prev(next, Some(new_index));
+            self.set_next(new_index, next);
+            self.set_prev(next, new_index);
         }
-        self.finalize_insertion(index_at, Some(new_index), new_index, Some(index_at));
+        self.finalize_insertion(index_at, new_index, new_index, index_at);
         new_index
     }
 
     pub fn insert_before(&mut self, at: Index, datum: T) -> Index {
         let (new_index, index_at) = self.setup_insertion(at, datum);
         if let Some(prev) = self.prev(at) {
-            self.set_prev(new_index, Some(prev));
-            self.set_next(prev, Some(new_index));
+            self.set_prev(new_index, prev);
+            self.set_next(prev, new_index);
         }
-        self.finalize_insertion(new_index, Some(index_at), index_at, Some(new_index));
+        self.finalize_insertion(new_index, index_at, index_at, new_index);
         new_index
     }
 
@@ -100,17 +129,17 @@ impl<T> ListContainer<T> {
     // later recycling, making it a logic error
     // to use the value of `at` for further operations.
     pub fn remove(&mut self, at: Index) {
-        let prev = self.prev(at);
-        let next = self.next(at);
+        let prev = self.prev_raw(at);
+        let next = self.next_raw(at);
 
-        if let Some(p) = prev {
-            self.set_next(p, next);
+        if !prev.is_sentinel() {
+            self.set_next(prev, next);
         }
-        if let Some(n) = next {
-            self.set_prev(n, prev);
+        if !next.is_sentinel() {
+            self.set_prev(next, prev);
         }
-        self.set_prev(at, None);
-        self.set_next(at, None);
+        self.set_prev(at, Index::sentinel());
+        self.set_next(at, Index::sentinel());
         self.free_list.push(at.0);
     }
 
@@ -139,7 +168,7 @@ impl<'lists, T> Iterator for IterateForward<'lists, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = self.next {
-            self.next = self.lists.cursor[index.0].next;
+            self.next = self.lists.cursor[index.0].next.into_option();
             Some(&self.lists.data[index.0])
         } else {
             None
@@ -157,7 +186,7 @@ impl<'lists, T> Iterator for IterateBackward<'lists, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = self.prev {
-            self.prev = self.lists.cursor[index.0].prev;
+            self.prev = self.lists.cursor[index.0].prev.into_option();
             Some(&self.lists.data[index.0])
         } else {
             None
