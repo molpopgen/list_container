@@ -4,7 +4,6 @@ pub struct Index(usize);
 
 #[derive(Clone, Copy, Debug)]
 struct Cursor {
-    current: Index,
     prev: Option<Index>,
     next: Option<Index>,
 }
@@ -32,7 +31,6 @@ impl<T> ListContainer<T> {
         } else {
             self.data.push(datum);
             let cursor = Cursor {
-                current: Index(self.data.len() - 1),
                 prev: None,
                 next: None,
             };
@@ -43,8 +41,7 @@ impl<T> ListContainer<T> {
 
     fn setup_insertion(&mut self, at: Index, datum: T) -> (Index, Index) {
         let new_index = self.new_index(datum);
-        let index_at = self.cursor[at.0].current;
-        (new_index, index_at)
+        (new_index, at)
     }
 
     fn finalize_insertion(
