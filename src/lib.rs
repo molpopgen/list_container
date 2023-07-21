@@ -1,3 +1,6 @@
+// turns out none of this is original. (of course)
+// https://csiflabs.cs.ucdavis.edu/~ssdavis/60/CursorList.pdf
+
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Index(usize);
